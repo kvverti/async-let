@@ -66,4 +66,19 @@ impl<List> Group<List> {
             async_let_group: &mut self.fut_list,
         }
     }
+
+    pub async fn detach_and_wait_for<'fut, I, F: Future>(
+        self,
+        handle: Handle<'fut, F>,
+    ) -> (F::Output, Group<<List as Detach<'fut, F, I>>::Output>)
+    where
+        List: Detach<'fut, F, I>,
+    {
+        let (ready_or_not, group) = self.detach(handle);
+        let output = match ready_or_not {
+            ReadyOrNot::Ready(val) => val,
+            ReadyOrNot::Not(fut) => fut.await,
+        };
+        (output, group)
+    }
 }
