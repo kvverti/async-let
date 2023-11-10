@@ -41,7 +41,9 @@ impl<F: Future, T: DriveWaitFor> DriveWaitFor for At<'_, F, T> {
     fn poll_once(&mut self, cx: &mut Context<'_>) {
         let At { node, tail } = self;
         if let ReadyOrNot::Not(fut) = node {
-            let _ = fut.as_mut().poll(cx);
+            if let Poll::Ready(val) = fut.as_mut().poll(cx) {
+                *node = ReadyOrNot::Ready(val);
+            }
         }
         tail.poll_once(cx);
     }
