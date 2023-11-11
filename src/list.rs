@@ -18,8 +18,8 @@ impl FutList for Empty {}
 
 impl<F: Future, T: FutList> FutList for At<'_, F, T> {}
 
-pub struct Here(());
-pub struct There<I>(I);
+pub struct Z(());
+pub struct S<I>(I);
 
 pub trait Detach<'fut, F: Future, I> {
     type Output;
@@ -27,7 +27,7 @@ pub trait Detach<'fut, F: Future, I> {
     fn detach(self) -> (ReadyOrNot<'fut, F>, Self::Output);
 }
 
-impl<'fut, F: Future, T> Detach<'fut, F, Here> for At<'fut, F, T> {
+impl<'fut, F: Future, T> Detach<'fut, F, Z> for At<'fut, F, T> {
     type Output = T;
 
     fn detach(self) -> (ReadyOrNot<'fut, F>, Self::Output) {
@@ -35,7 +35,7 @@ impl<'fut, F: Future, T> Detach<'fut, F, Here> for At<'fut, F, T> {
     }
 }
 
-impl<'fut, F: Future, I, H: Future, T> Detach<'fut, F, There<I>> for At<'fut, H, T>
+impl<'fut, F: Future, I, H: Future, T> Detach<'fut, F, S<I>> for At<'fut, H, T>
 where
     T: Detach<'fut, F, I>,
 {

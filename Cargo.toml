@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 pin-project-lite = "0.2.13"
+
+[dev-dependencies]
+pollster = "0.3.0"
