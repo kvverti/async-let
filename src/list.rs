@@ -1,4 +1,4 @@
-use crate::ReadyOrNot;
+use crate::{wait::DriveWaitFor, ReadyOrNot};
 use core::future::Future;
 
 /// Represents a typed list of no background futures.
@@ -11,6 +11,12 @@ pub struct At<'fut, F: Future, Tail> {
     pub(crate) node: ReadyOrNot<'fut, F>,
     pub(crate) tail: Tail,
 }
+
+pub trait FutList: DriveWaitFor {}
+
+impl FutList for Empty {}
+
+impl<F: Future, T: FutList> FutList for At<'_, F, T> {}
 
 pub struct Here(());
 pub struct There<I>(I);

@@ -5,9 +5,11 @@ use core::{
 };
 
 use crate::{
-    list::{At, Empty},
+    list::{At, Empty, FutList},
     ReadyOrNot,
 };
+
+pub(crate) use private::DriveWaitFor;
 
 pin_project_lite::pin_project! {
     /// Future type for the wait_for method.
@@ -18,7 +20,7 @@ pin_project_lite::pin_project! {
     }
 }
 
-impl<F: Future, List: DriveWaitFor> Future for WaitFor<'_, F, List> {
+impl<F: Future, List: FutList> Future for WaitFor<'_, F, List> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -28,9 +30,11 @@ impl<F: Future, List: DriveWaitFor> Future for WaitFor<'_, F, List> {
     }
 }
 
-/// Helper trait to poll each async let future when a waited on future is polled.
-trait DriveWaitFor {
-    fn poll_once(&mut self, cx: &mut Context<'_>);
+mod private {
+    /// Helper trait to poll each async let future when a waited on future is polled.
+    pub trait DriveWaitFor {
+        fn poll_once(&mut self, cx: &mut super::Context<'_>);
+    }
 }
 
 impl DriveWaitFor for Empty {

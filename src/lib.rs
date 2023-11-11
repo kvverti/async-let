@@ -3,7 +3,7 @@
 
 use core::{future::Future, marker::PhantomData, pin::Pin};
 
-use list::{At, Detach, Empty};
+use list::{At, Detach, Empty, FutList};
 use wait::WaitFor;
 
 pub mod list;
@@ -73,11 +73,12 @@ impl<List> Group<List> {
     ) -> (F::Output, Group<<List as Detach<'fut, F, I>>::Output>)
     where
         List: Detach<'fut, F, I>,
+        List::Output: FutList,
     {
-        let (ready_or_not, group) = self.detach(handle);
+        let (ready_or_not, mut group) = self.detach(handle);
         let output = match ready_or_not {
             ReadyOrNot::Ready(val) => val,
-            ReadyOrNot::Not(fut) => fut.await,
+            ReadyOrNot::Not(fut) => group.wait_for(fut).await,
         };
         (output, group)
     }
