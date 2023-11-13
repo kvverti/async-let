@@ -121,6 +121,7 @@ impl<F: Future> ReadyOrNot<'_, F> {
 }
 
 /// This type defines a specific set of futures that are driven whenever a future is awaited through a group's cooperation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Group<List> {
     /// The type-safe list of futures held in this group.
     fut_list: List,
@@ -128,6 +129,7 @@ pub struct Group<List> {
 
 impl Group<Empty> {
     /// Constructs a new group with no attached futures.
+    #[inline]
     pub const fn new() -> Self {
         Self {
             fut_list: Empty { _priv: () },
@@ -170,6 +172,7 @@ impl<List> Group<List> {
                 fut_list: At {
                     node: ReadyOrNot::Not(fut),
                     tail: self.fut_list,
+                    _holds_output: PhantomData,
                 },
             },
         )
@@ -241,9 +244,9 @@ impl<List> Group<List> {
         (fut, Group { fut_list: rest })
     }
 
-    /// Await a future while concurrently driving this group's background futures. The background futures
-    /// share a context with the future being awaited, so the enclosing task will be awoken if one of the
-    /// background futures makes progress.
+    /// Await a future while concurrently driving this group's background futures. The background futures are
+    /// not polled if the future being awaited does not suspend. The background futures share a context with
+    /// the future being awaited, so the enclosing task will be awoken if any one of the background futures makes progress.
     /// 
     /// This method is used to await a future that is not in the set of background futures attached to this group.
     /// To await a future that *is* attached to this group, use [`Self::detach_and_wait_for`].

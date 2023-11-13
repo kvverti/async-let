@@ -1,15 +1,19 @@
 use crate::{wait::DriveWaitFor, ReadyOrNot};
-use core::future::Future;
+use core::{future::Future, marker::PhantomData};
 
 /// Represents a typed list of no background futures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Empty {
     pub(crate) _priv: (),
 }
 
 /// Represents a typed list of one or more background futures.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct At<'fut, F: Future, Tail> {
     pub(crate) node: ReadyOrNot<'fut, F>,
     pub(crate) tail: Tail,
+    // needed to tell derive macros that this type indirectly contains F::Output
+    pub(crate) _holds_output: PhantomData<F::Output>,
 }
 
 pub trait FutList: DriveWaitFor {}
@@ -48,6 +52,7 @@ where
             At {
                 node: self.node,
                 tail,
+                _holds_output: PhantomData,
             },
         )
     }

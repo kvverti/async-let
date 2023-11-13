@@ -13,6 +13,7 @@ pub(crate) use private::DriveWaitFor;
 
 pin_project_lite::pin_project! {
     /// Future type for the wait_for method.
+    #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
     pub struct WaitFor<'group, F, List> {
         #[pin]
         pub(crate) driving_fut: F,
@@ -25,8 +26,11 @@ impl<F: Future, List: FutList> Future for WaitFor<'_, F, List> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
-        this.async_let_group.poll_once(cx);
-        this.driving_fut.poll(cx)
+        let poll = this.driving_fut.poll(cx);
+        if poll.is_pending() {
+            this.async_let_group.poll_once(cx);
+        }
+        poll
     }
 }
 
@@ -38,12 +42,13 @@ mod private {
 }
 
 impl DriveWaitFor for Empty {
+    #[inline]
     fn poll_once(&mut self, _cx: &mut Context<'_>) {}
 }
 
 impl<F: Future, T: DriveWaitFor> DriveWaitFor for At<'_, F, T> {
     fn poll_once(&mut self, cx: &mut Context<'_>) {
-        let At { node, tail } = self;
+        let At { node, tail, .. } = self;
         if let ReadyOrNot::Not(fut) = node {
             if let Poll::Ready(val) = fut.as_mut().poll(cx) {
                 *node = ReadyOrNot::Ready(val);
