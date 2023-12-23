@@ -1,7 +1,13 @@
 [package]
 name = "async-let"
+description = "An experiment based on Conrad Ludgate's musings."
 version = "0.1.0"
+authors = ["Thalia Nero"]
 edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/kvverti/async-let"
+keywords = ["async"]
+categories = ["no-std"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
