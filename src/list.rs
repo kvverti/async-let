@@ -17,6 +17,7 @@ pub struct At<F: Future, Tail>
     pub(crate) _holds_output: PhantomData<F::Output>,
 }
 
+/// A trait representing a list of background futures.
 pub trait FutList: DriveWaitFor {}
 
 impl FutList for Empty {}
@@ -25,13 +26,19 @@ impl<F: Future + Unpin, T: FutList> FutList for At<F, T>
 {
 }
 
+/// A marker type used for indexing futures in a group. This type represents the first future in a group.
 pub struct Z(());
+
+/// A marker type used for indexing futures in a group. This type represents the next future in a group.
 pub struct S<I>(I);
 
+/// A trait that defines the operation of detaching a future of type `F` at index `I`.
 pub trait Detach<F: Future, I>
 {
+    /// The group that remains after detaching the future.
     type Output;
 
+    /// Detaches the future at index `I`.
     fn detach(self) -> (ReadyOrNot<F>, Self::Output);
 }
 

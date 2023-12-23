@@ -85,6 +85,7 @@ use core::{future::Future, marker::PhantomData};
 use list::{At, Detach, Empty, FutList};
 use wait::WaitFor;
 
+/// Types and traits for interacting with a group of futures.
 pub mod list;
 pub mod wait;
 
@@ -102,7 +103,7 @@ pub enum ReadyOrNot<F: Future>
 {
     /// If the future has run to completion, this variant holds the future's output.
     Ready(F::Output),
-    /// If the future has not yet run to completion, this variant holds a pinning reference to the future.
+    /// If the future has not yet run to completion, this variant holds the future.
     Not(F),
 }
 
