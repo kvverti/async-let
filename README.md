@@ -54,9 +54,8 @@ the future added to or removed from the set of background futures, respectively.
 In the quest for minimal overhead, several tradeoffs were made.
 - **Ergonomics**: while the API was made to be as ergonomic as possible, callers are still required to manually add and
   remove futures, thread the group through each operation, and locally pin futures explicitly.
-- **Drop order**: futures that have been attached to groups will be dropped when their lifetime ends, and *not* when they
-  are polled to completion. Even if a future is later detached and awaited, it will not be dropped until its storage
-  is deallocated or goes out of scope.
+- **Pinning**: Because a group stores its list of futures inline, the stored futures must be `Unpin`. Futures that require
+  pinning must be stored behind an indirection, such as with `pin!` or `Box::pin`.
 - **Lifetimes**: a group is necessarily moved when a future is attached or detached. If a future is attached in a nested
   scope, it must be detached before leaving that scope, or else the group (and all its attached futures) will be made
   inaccessible.

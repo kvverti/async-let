@@ -13,7 +13,7 @@ pub(crate) use private::DriveWaitFor;
 
 pin_project_lite::pin_project! {
     /// Future type for the [`Group::wait_for`] method.
-    /// 
+    ///
     /// [`wait_for`]: super::Group::wait_for
     #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
     pub struct WaitFor<'group, F, List> {
@@ -48,11 +48,12 @@ impl DriveWaitFor for Empty {
     fn poll_once(&mut self, _cx: &mut Context<'_>) {}
 }
 
-impl<F: Future, T: DriveWaitFor> DriveWaitFor for At<'_, F, T> {
+impl<F: Future + Unpin, T: DriveWaitFor> DriveWaitFor for At<F, T>
+{
     fn poll_once(&mut self, cx: &mut Context<'_>) {
         let At { node, tail, .. } = self;
         if let ReadyOrNot::Not(fut) = node {
-            if let Poll::Ready(val) = fut.as_mut().poll(cx) {
+            if let Poll::Ready(val) = Pin::new(fut).poll(cx) {
                 *node = ReadyOrNot::Ready(val);
             }
         }

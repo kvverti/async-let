@@ -9,8 +9,9 @@ pub struct Empty {
 
 /// Represents a typed list of one or more background futures.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct At<'fut, F: Future, Tail> {
-    pub(crate) node: ReadyOrNot<'fut, F>,
+pub struct At<F: Future, Tail>
+{
+    pub(crate) node: ReadyOrNot<F>,
     pub(crate) tail: Tail,
     // needed to tell derive macros that this type indirectly contains F::Output
     pub(crate) _holds_output: PhantomData<F::Output>,
@@ -20,32 +21,36 @@ pub trait FutList: DriveWaitFor {}
 
 impl FutList for Empty {}
 
-impl<F: Future, T: FutList> FutList for At<'_, F, T> {}
+impl<F: Future + Unpin, T: FutList> FutList for At<F, T>
+{
+}
 
 pub struct Z(());
 pub struct S<I>(I);
 
-pub trait Detach<'fut, F: Future, I> {
+pub trait Detach<F: Future, I>
+{
     type Output;
 
-    fn detach(self) -> (ReadyOrNot<'fut, F>, Self::Output);
+    fn detach(self) -> (ReadyOrNot<F>, Self::Output);
 }
 
-impl<'fut, F: Future, T> Detach<'fut, F, Z> for At<'fut, F, T> {
+impl<F: Future, T> Detach<F, Z> for At<F, T>
+{
     type Output = T;
 
-    fn detach(self) -> (ReadyOrNot<'fut, F>, Self::Output) {
+    fn detach(self) -> (ReadyOrNot<F>, Self::Output) {
         (self.node, self.tail)
     }
 }
 
-impl<'fut, F: Future, I, H: Future, T> Detach<'fut, F, S<I>> for At<'fut, H, T>
+impl<F: Future, I, H: Future, T> Detach<F, S<I>> for At<H, T>
 where
-    T: Detach<'fut, F, I>,
+    T: Detach<F, I>,
 {
-    type Output = At<'fut, H, T::Output>;
+    type Output = At<H, T::Output>;
 
-    fn detach(self) -> (ReadyOrNot<'fut, F>, Self::Output) {
+    fn detach(self) -> (ReadyOrNot<F>, Self::Output) {
         let (val, tail) = self.tail.detach();
         (
             val,

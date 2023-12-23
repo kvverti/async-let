@@ -63,9 +63,8 @@
 //! In the quest for minimal overhead, several tradeoffs were made.
 //! - **Ergonomics**: while the API was made to be as ergonomic as possible, callers are still required to manually add and
 //!   remove futures, thread the group through each operation, and locally pin futures explicitly.
-//! - **Drop order**: futures that have been attached to groups will be dropped when their lifetime ends, and *not* when they
-//!   are polled to completion. Even if a future is later detached and awaited, it will not be dropped until its storage
-//!   is deallocated or goes out of scope.
+//! - **Pinning**: Because a group stores its list of futures inline, the stored futures must be `Unpin`. Futures that require
+//!   pinning must be stored behind an indirection, such as with `pin!` or `Box::pin`.
 //! - **Lifetimes**: a group is necessarily moved when a future is attached or detached. If a future is attached in a nested
 //!   scope, it must be detached before leaving that scope, or else the group (and all its attached futures) will be made
 //!   inaccessible.
@@ -81,7 +80,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-use core::{future::Future, marker::PhantomData, pin::Pin};
+use core::{future::Future, marker::PhantomData};
 
 use list::{At, Detach, Empty, FutList};
 use wait::WaitFor;
@@ -92,24 +91,26 @@ pub mod wait;
 /// A typed handle representing a specific future type in an async let group. A handle can be redeemed for the future
 /// it represents by passing it to [`Group::detach`].
 #[derive(Debug)]
-pub struct Handle<'fut, F> {
-    /// A handle logically replaces a (pinning) mutable reference to the future.
-    _ph: PhantomData<&'fut mut F>,
+pub struct Handle<F> {
+    /// A handle logically replaces a future.
+    _ph: PhantomData<F>,
 }
 
 /// This type holds a future that has been detached from a group.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ReadyOrNot<'fut, F: Future> {
+pub enum ReadyOrNot<F: Future>
+{
     /// If the future has run to completion, this variant holds the future's output.
     Ready(F::Output),
     /// If the future has not yet run to completion, this variant holds a pinning reference to the future.
-    Not(Pin<&'fut mut F>),
+    Not(F),
 }
 
-impl<F: Future> ReadyOrNot<'_, F> {
-    /// A comvenience method for retrieving the output of the future, either by driving the contained future
+impl<F: Future> ReadyOrNot<F>
+{
+    /// A convenience method for retrieving the output of the future, either by driving the contained future
     /// to completion or by unwrapping the output value.
-    /// 
+    ///
     /// Note that this method does *not* drive the background futures of an async group. To drive the background
     /// futures, use [`Group::detach_and_wait_for`] instead of detaching the future separately.
     pub async fn output(self) -> F::Output {
@@ -138,34 +139,32 @@ impl Group<Empty> {
 }
 
 impl<List> Group<List> {
-    /// Adds a future to this group's set of background futures. The future must be pinned in external storage
-    /// before being attached, so this method takes a pinning reference `Pin<&mut F>`.
-    /// 
+    /// Adds a future to this group's set of background futures. The future must be `Unpin`, or be pinned in external
+    /// storage before being attached.
+    ///
     /// This method consumes `self` and returns a *new* group with the future attached, as well as a handle that
     /// can be used to later detach the future.
-    /// 
-    /// **A note of caution:** the group stores a *borrow* to the future rather than the future itself, which means
-    /// that the lifetime of the group is limited to the lifetime of this borrow until the future is detached.
-    /// 
+    ///
     /// # Example
     /// The most common way to use this method is to locally pin a future before attaching it.
     /// ```
     /// # use core::pin::pin;
     /// # async fn some_future() {}
     /// let group = async_let::Group::new();
-    /// 
+    ///
     /// let fut = pin!(some_future()); // locally pin before attaching
     /// let (handle, group) = group.attach(fut);
     /// ```
-    /// However, any pinning reference to a future can be used. 
+    /// However, any pinning pointer to a future can be used.
     /// ```
     /// # async fn some_future() {}
     /// let group = async_let::Group::new();
-    /// 
+    ///
     /// let mut fut = Box::pin(some_future()); // pin to the heap
-    /// let (handle, group) = group.attach(fut.as_mut());
+    /// let (handle, group) = group.attach(fut);
     /// ```
-    pub fn attach<F: Future>(self, fut: Pin<&mut F>) -> (Handle<'_, F>, Group<At<'_, F, List>>) {
+    pub fn attach<F: Future + Unpin>(self, fut: F) -> (Handle<F>, Group<At<F, List>>)
+    {
         (
             Handle { _ph: PhantomData },
             Group {
@@ -178,13 +177,13 @@ impl<List> Group<List> {
         )
     }
 
-    /// Removes a future from this group's set of background futures. The borrow of the future held by this group
-    /// is relinquished and returned to the caller. The detached future may be partially driven or even completed.
+    /// Removes a future from this group's set of background futures. The future held by this group
+    /// is relinquished and returned to the caller. The detached future may have been partially driven or even completed.
     /// If the future is already completed, then its output is saved and returned to the caller instead of the future.
-    /// 
+    ///
     /// This method consumes `self` and returns a *new* group with the future detached. If you want to additionally
     /// await the detached future, you can use `Self::detach_and_wait_for` as a convenience.
-    /// 
+    ///
     /// # Example
     /// The primary reason for detaching a future *without* awaiting it is when its lifetime will end prior to it being
     /// driven to completion.
@@ -200,7 +199,7 @@ impl<List> Group<List> {
     ///     let (handle, group) = group.attach(fut);
     ///     
     ///     // ... do work with `fut` in the background ...
-    /// 
+    ///
     ///     // "error: temporary value dropped while borrowed" if commented
     ///     let (fut, group) = group.detach(handle);
     ///     group
@@ -217,27 +216,24 @@ impl<List> Group<List> {
     /// # use core::pin::pin;
     /// # async fn some_future() {}
     /// let group = async_let::Group::new();
-    /// 
+    ///
     /// let fut1 = pin!(some_future());
     /// let (handle1, group) = group.attach(fut1);
-    /// 
+    ///
     /// let fut2 = pin!(some_future());
     /// let (handle2, group) = group.attach(fut2);
-    /// 
+    ///
     /// // error: type annotations needed
     /// // let (fut1, group) = group.detach(handle1);
     /// use async_let::list::{S, Z};
     /// let (fut1, group) = group.detach::<S<Z>, _>(handle1);
-    /// 
+    ///
     /// // type inference *can* infer the index now that the other future is detached
     /// let (fut2, group) = group.detach(handle2);
     /// ```
-    pub fn detach<'fut, I, F: Future>(
-        self,
-        handle: Handle<'fut, F>,
-    ) -> (ReadyOrNot<'fut, F>, Group<List::Output>)
+    pub fn detach<I, F: Future>(self, handle: Handle<F>) -> (ReadyOrNot<F>, Group<List::Output>)
     where
-        List: Detach<'fut, F, I>,
+        List: Detach<F, I>,
     {
         let _ = handle;
         let (fut, rest) = self.fut_list.detach();
@@ -247,22 +243,22 @@ impl<List> Group<List> {
     /// Await a future while concurrently driving this group's background futures. The background futures are
     /// not polled if the future being awaited does not suspend. The background futures share a context with
     /// the future being awaited, so the enclosing task will be awoken if any one of the background futures makes progress.
-    /// 
+    ///
     /// This method is used to await a future that is not in the set of background futures attached to this group.
     /// To await a future that *is* attached to this group, use [`Self::detach_and_wait_for`].
-    /// 
+    ///
     /// # Example
     /// ```
     /// # use core::pin::pin;
     /// # pollster::block_on(async {
     /// let group = async_let::Group::new();
-    /// 
+    ///
     /// // ... attach futures to `group` ...
     /// # let f1 = pin!(async {});
     /// # let (h1, group) = group.attach(f1);
     /// # let f2 = pin!(async {});
     /// # let (h2, mut group) = group.attach(f2);
-    /// 
+    ///
     /// let output = group.wait_for(async { 3 + 7 }).await;
     /// assert_eq!(output, 10);
     /// # });
@@ -294,12 +290,15 @@ impl<List> Group<List> {
     /// ```
     /// [`detach`]: Self::detach
     /// [`wait_for`]: Self::wait_for
-    pub async fn detach_and_wait_for<'fut, I, F: Future>(
+    pub async fn detach_and_wait_for<I, F: Future>(
         self,
-        handle: Handle<'fut, F>,
-    ) -> (F::Output, Group<<List as Detach<'fut, F, I>>::Output>)
+        handle: Handle<F>,
+    ) -> (
+        F::Output,
+        Group<<List as Detach<F, I>>::Output>,
+    )
     where
-        List: Detach<'fut, F, I>,
+        List: Detach<F, I>,
         List::Output: FutList,
     {
         let (ready_or_not, mut group) = self.detach(handle);
