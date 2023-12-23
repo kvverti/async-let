@@ -12,7 +12,9 @@ use crate::{
 pub(crate) use private::DriveWaitFor;
 
 pin_project_lite::pin_project! {
-    /// Future type for the wait_for method.
+    /// Future type for the [`Group::wait_for`] method.
+    /// 
+    /// [`wait_for`]: super::Group::wait_for
     #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
     pub struct WaitFor<'group, F, List> {
         #[pin]
