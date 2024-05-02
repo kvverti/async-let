@@ -183,28 +183,25 @@ impl<List> Group<List> {
     /// If the future is already completed, then its output is saved and returned to the caller instead of the future.
     ///
     /// This method consumes `self` and returns a *new* group with the future detached. If you want to additionally
-    /// await the detached future, you can use `Self::detach_and_wait_for` as a convenience.
+    /// await the detached future, you can use `Self::detach_and_wait_for` as a convenience. If you want to cancel the detached
+    /// future, you can use `Self::detach_and_cancel` as a convenience.
     ///
     /// # Example
-    /// The primary reason for detaching a future *without* awaiting it is when its lifetime will end prior to it being
-    /// driven to completion.
     /// ```
     /// # use core::pin::pin;
     /// # async fn some_future() {}
     /// # async fn some_other_future() {}
+    /// # fn pass_elsewhere(_: impl core::future::Future) {}
     /// # pollster::block_on(async {
     /// let group = async_let::Group::new();
-    /// let mut group = {
-    ///     // attach a short-lived future
-    ///     let fut = pin!(some_future());
-    ///     let (handle, group) = group.attach(fut);
+    /// let fut = pin!(some_future());
+    /// let (handle, group) = group.attach(fut);
     ///     
-    ///     // ... do work with `fut` in the background ...
+    /// // ... do work with `fut` in the background ...
     ///
-    ///     // "error: temporary value dropped while borrowed" if commented
-    ///     let (fut, group) = group.detach(handle);
-    ///     group
-    /// };
+    /// let (fut, mut group) = group.detach(handle);
+    /// pass_elsewhere(fut.output());
+    ///
     /// // continue to use the group
     /// let val = group.wait_for(some_other_future()).await;
     /// # });
@@ -305,5 +302,38 @@ impl<List> Group<List> {
         let (ready_or_not, mut group) = self.detach(handle);
         let output = group.wait_for(ready_or_not.output()).await;
         (output, group)
+    }
+
+    /// A convenience method for [`detach`]ing a future and immediately canceling it. This is useful
+    /// if you need to detach a future that is about to go out of scope, in order to continue using the group.
+    ///
+    /// # Example
+    /// ```
+    /// # use core::pin::pin;
+    /// # async fn some_future() {}
+    /// # async fn some_other_future() {}
+    /// # pollster::block_on(async {
+    /// let group = async_let::Group::new();
+    /// let mut group = {
+    ///     // attach a short-lived future
+    ///     let fut = pin!(some_future());
+    ///     let (handle, group) = group.attach(fut);
+    ///     
+    ///     // ... do work with `fut` in the background ...
+    ///
+    ///     // "error: temporary value dropped while borrowed" if commented
+    ///     group.detach_and_cancel(handle)
+    /// };
+    /// // continue to use the group
+    /// let val = group.wait_for(some_other_future()).await;
+    /// # });
+    /// ```
+    /// [`detach`]: Self::detach
+    pub fn detach_and_cancel<I, F: Future>(self, handle: Handle<F>) -> Group<List::Output>
+    where
+        List: Detach<F, I>,
+    {
+        let (_, group) = self.detach(handle);
+        group
     }
 }
