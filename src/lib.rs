@@ -99,16 +99,14 @@ pub struct Handle<F> {
 
 /// This type holds a future that has been detached from a group.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ReadyOrNot<F: Future>
-{
+pub enum ReadyOrNot<F: Future> {
     /// If the future has run to completion, this variant holds the future's output.
     Ready(F::Output),
     /// If the future has not yet run to completion, this variant holds the future.
     Not(F),
 }
 
-impl<F: Future> ReadyOrNot<F>
-{
+impl<F: Future> ReadyOrNot<F> {
     /// A convenience method for retrieving the output of the future, either by driving the contained future
     /// to completion or by unwrapping the output value.
     ///
@@ -164,8 +162,7 @@ impl<List> Group<List> {
     /// let mut fut = Box::pin(some_future()); // pin to the heap
     /// let (handle, group) = group.attach(fut);
     /// ```
-    pub fn attach<F: Future + Unpin>(self, fut: F) -> (Handle<F>, Group<At<F, List>>)
-    {
+    pub fn attach<F: Future + Unpin>(self, fut: F) -> (Handle<F>, Group<At<F, List>>) {
         (
             Handle { _ph: PhantomData },
             Group {
@@ -196,7 +193,7 @@ impl<List> Group<List> {
     /// let group = async_let::Group::new();
     /// let fut = pin!(some_future());
     /// let (handle, group) = group.attach(fut);
-    ///     
+    ///
     /// // ... do work with `fut` in the background ...
     ///
     /// let (fut, mut group) = group.detach(handle);
@@ -291,10 +288,7 @@ impl<List> Group<List> {
     pub async fn detach_and_wait_for<I, F: Future>(
         self,
         handle: Handle<F>,
-    ) -> (
-        F::Output,
-        Group<<List as Detach<F, I>>::Output>,
-    )
+    ) -> (F::Output, Group<<List as Detach<F, I>>::Output>)
     where
         List: Detach<F, I>,
         List::Output: FutList,

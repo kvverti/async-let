@@ -9,8 +9,7 @@ pub struct Empty {
 
 /// Represents a typed list of one or more background futures.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct At<F: Future, Tail>
-{
+pub struct At<F: Future, Tail> {
     pub(crate) node: ReadyOrNot<F>,
     pub(crate) tail: Tail,
     // needed to tell derive macros that this type indirectly contains F::Output
@@ -22,9 +21,7 @@ pub trait FutList: DriveWaitFor {}
 
 impl FutList for Empty {}
 
-impl<F: Future + Unpin, T: FutList> FutList for At<F, T>
-{
-}
+impl<F: Future + Unpin, T: FutList> FutList for At<F, T> {}
 
 /// A marker type used for indexing futures in a group. This type represents the first future in a group.
 pub struct Z(());
@@ -33,8 +30,7 @@ pub struct Z(());
 pub struct S<I>(I);
 
 /// A trait that defines the operation of detaching a future of type `F` at index `I`.
-pub trait Detach<F: Future, I>
-{
+pub trait Detach<F: Future, I> {
     /// The group that remains after detaching the future.
     type Output;
 
@@ -42,8 +38,7 @@ pub trait Detach<F: Future, I>
     fn detach(self) -> (ReadyOrNot<F>, Self::Output);
 }
 
-impl<F: Future, T> Detach<F, Z> for At<F, T>
-{
+impl<F: Future, T> Detach<F, Z> for At<F, T> {
     type Output = T;
 
     fn detach(self) -> (ReadyOrNot<F>, Self::Output) {

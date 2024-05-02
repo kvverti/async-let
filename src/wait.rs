@@ -48,8 +48,7 @@ impl DriveWaitFor for Empty {
     fn poll_once(&mut self, _cx: &mut Context<'_>) {}
 }
 
-impl<F: Future + Unpin, T: DriveWaitFor> DriveWaitFor for At<F, T>
-{
+impl<F: Future + Unpin, T: DriveWaitFor> DriveWaitFor for At<F, T> {
     fn poll_once(&mut self, cx: &mut Context<'_>) {
         let At { node, tail, .. } = self;
         if let ReadyOrNot::Not(fut) = node {
